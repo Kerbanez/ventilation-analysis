@@ -1,0 +1,203 @@
+-- Топ-10 по прогнозу прибыли на 2025 год
+SELECT 
+    m.manufacturer_name,
+    f2024.profit as profit_2024,
+    ROUND((f2024.profit / CAST(f2024.revenue AS FLOAT)) * 100, 1) as profitability_2024,
+    ff.forecast_revenue * 0.1 as forecast_profit_2025, -- Предполагаем 10% рентабельность
+    ff.forecast_methodology
+FROM manufacturers m
+JOIN financials f2024 ON m.manufacturer_id = f2024.manufacturer_id AND f2024.year = 2024
+JOIN financial_forecast_2025 ff ON m.manufacturer_id = ff.manufacturer_id
+ORDER BY f2024.profit DESC
+LIMIT 10;
+
+-- Динамика прибыли и рентабельности 2022-2024
+SELECT 
+    m.manufacturer_name,
+    f.year,
+    f.profit,
+    f.revenue,
+    ROUND((f.profit / CAST(f.revenue AS FLOAT)) * 100, 1) as profitability_percent
+FROM manufacturers m
+JOIN financials f ON m.manufacturer_id = f.manufacturer_id
+ORDER BY m.manufacturer_name, f.year;
+
+-- Продуктовые портфели с показателями прибыльности
+SELECT 
+    m.manufacturer_name,
+    GROUP_CONCAT(DISTINCT s.segment_name) as segments,
+    mps.product_categories,
+    mps.unique_competencies,
+    f2024.profit as profit_2024,
+    ROUND((f2024.profit / CAST(f2024.revenue AS FLOAT)) * 100, 1) as profitability_2024
+FROM manufacturers m
+JOIN manufacturer_segments ms ON m.manufacturer_id = ms.manufacturer_id
+JOIN segments s ON ms.segment_id = s.segment_id
+JOIN manufacturer_product_strategy mps ON m.manufacturer_id = mps.manufacturer_id
+JOIN financials f2024 ON m.manufacturer_id = f2024.manufacturer_id AND f2024.year = 2024
+GROUP BY m.manufacturer_id
+ORDER BY f2024.profit DESC;
+
+-- Прибыльность по сегментам рынка
+SELECT 
+    s.segment_name,
+    COUNT(*) as manufacturer_count,
+    ROUND(AVG(f.profit), 0) as avg_profit,
+    ROUND(AVG((f.profit / CAST(f.revenue AS FLOAT)) * 100), 1) as avg_profitability_percent
+FROM segments s
+JOIN manufacturer_segments ms ON s.segment_id = ms.segment_id
+JOIN manufacturers m ON ms.manufacturer_id = m.manufacturer_id
+JOIN financials f ON m.manufacturer_id = f.manufacturer_id AND f.year = 2024
+WHERE ms.is_primary = 1
+GROUP BY s.segment_name
+ORDER BY avg_profitability_percent DESC;
+
+-- Влияние локализации на прибыльность
+SELECT 
+    m.manufacturer_name,
+    l.overall_level as localization_level,
+    f2024.profit as profit_2024,
+    ROUND((f2024.profit / CAST(f2024.revenue AS FLOAT)) * 100, 1) as profitability_percent,
+    l.source_info as localization_details
+FROM manufacturers m
+JOIN localization l ON m.manufacturer_id = l.manufacturer_id
+JOIN financials f2024 ON m.manufacturer_id = f2024.manufacturer_id AND f2024.year = 2024
+ORDER BY f2024.profit DESC;
+
+-- Статистика прибыльности по уровню локализации
+SELECT 
+    overall_level as localization_level,
+    COUNT(*) as manufacturer_count,
+    ROUND(AVG(f.profit), 0) as avg_profit,
+    ROUND(AVG((f.profit / CAST(f.revenue AS FLOAT)) * 100), 1) as avg_profitability_percent
+FROM localization l
+JOIN financials f ON l.manufacturer_id = f.manufacturer_id AND f.year = 2024
+GROUP BY overall_level
+ORDER BY avg_profitability_percent DESC;
+
+-- Эффективность производства: прибыль на сотрудника и на площадь
+SELECT 
+    m.manufacturer_name,
+    pc.employees,
+    pc.production_area_sqm,
+    f2024.profit as profit_2024,
+    ROUND(f2024.profit / pc.employees, 0) as profit_per_employee,
+    ROUND(f2024.profit / pc.production_area_sqm, 0) as profit_per_sqm,
+    pc.robotics_level
+FROM manufacturers m
+JOIN production_capacities pc ON m.manufacturer_id = pc.manufacturer_id
+JOIN financials f2024 ON m.manufacturer_id = f2024.manufacturer_id AND f2024.year = 2024
+ORDER BY profit_per_employee DESC;
+
+-- Влияние роботизации на прибыльность
+SELECT 
+    robotics_level,
+    COUNT(*) as manufacturer_count,
+    ROUND(AVG(f.profit), 0) as avg_profit,
+    ROUND(AVG(f.profit / pc.employees), 0) as avg_profit_per_employee,
+    ROUND(AVG((f.profit / CAST(f.revenue AS FLOAT)) * 100), 1) as avg_profitability_percent
+FROM production_capacities pc
+JOIN financials f ON pc.manufacturer_id = f.manufacturer_id AND f.year = 2024
+GROUP BY robotics_level
+ORDER BY avg_profit_per_employee DESC;
+
+-- Основной дашборд: ключевые показатели эффективности
+SELECT 
+    m.manufacturer_id,
+    m.manufacturer_name,
+    -- Финансы (прибыль-ориентированные)
+    f2022.profit as profit_2022,
+    f2023.profit as profit_2023,
+    f2024.profit as profit_2024,
+    ROUND((f2024.profit / CAST(f2024.revenue AS FLOAT)) * 100, 1) as profitability_2024,
+    -- Сегменты
+    (SELECT GROUP_CONCAT(s.segment_name) 
+     FROM manufacturer_segments ms 
+     JOIN segments s ON ms.segment_id = s.segment_id 
+     WHERE ms.manufacturer_id = m.manufacturer_id AND ms.is_primary = 1) as primary_segments,
+    -- Локализация
+    l.overall_level as localization_level,
+    -- Производство
+    pc.employees,
+    ROUND(f2024.profit / pc.employees, 0) as profit_per_employee,
+    -- Продукты
+    mps.product_categories
+FROM manufacturers m
+LEFT JOIN financials f2022 ON m.manufacturer_id = f2022.manufacturer_id AND f2022.year = 2022
+LEFT JOIN financials f2023 ON m.manufacturer_id = f2023.manufacturer_id AND f2023.year = 2023
+LEFT JOIN financials f2024 ON m.manufacturer_id = f2024.manufacturer_id AND f2024.year = 2024
+LEFT JOIN localization l ON m.manufacturer_id = l.manufacturer_id
+LEFT JOIN production_capacities pc ON m.manufacturer_id = pc.manufacturer_id
+LEFT JOIN manufacturer_product_strategy mps ON m.manufacturer_id = mps.manufacturer_id
+ORDER BY f2024.profit DESC;
+
+-- Рейтинг по ключевым метрикам прибыльности
+SELECT 
+    manufacturer_name,
+    profit_2024,
+    DENSE_RANK() OVER (ORDER BY profit_2024 DESC) as rank_by_profit,
+    profitability_percent,
+    DENSE_RANK() OVER (ORDER BY profitability_percent DESC) as rank_by_profitability,
+    profit_per_employee,
+    DENSE_RANK() OVER (ORDER BY profit_per_employee DESC) as rank_by_efficiency
+FROM (
+    SELECT 
+        m.manufacturer_name,
+        f.profit as profit_2024,
+        ROUND((f.profit / CAST(f.revenue AS FLOAT)) * 100, 1) as profitability_percent,
+        ROUND(f.profit / pc.employees, 0) as profit_per_employee
+    FROM manufacturers m
+    JOIN financials f ON m.manufacturer_id = f.manufacturer_id AND f.year = 2024
+    JOIN production_capacities pc ON m.manufacturer_id = pc.manufacturer_id
+)
+ORDER BY rank_by_profit;
+
+-- Динамика прибыльности компаний
+SELECT 
+    manufacturer_name,
+    profit_2022,
+    profit_2023,
+    profit_2024,
+    profitability_2022,
+    profitability_2023,
+    profitability_2024,
+    CASE 
+        WHEN profit_2024 > profit_2022 THEN 'Рост прибыли'
+        WHEN profit_2024 < profit_2022 THEN 'Спад прибыли' 
+        ELSE 'Стабильно'
+    END as profit_trend
+FROM (
+    SELECT 
+        m.manufacturer_name,
+        MAX(CASE WHEN f.year = 2022 THEN f.profit END) as profit_2022,
+        MAX(CASE WHEN f.year = 2023 THEN f.profit END) as profit_2023,
+        MAX(CASE WHEN f.year = 2024 THEN f.profit END) as profit_2024,
+        MAX(CASE WHEN f.year = 2022 THEN ROUND((f.profit / CAST(f.revenue AS FLOAT)) * 100, 1) END) as profitability_2022,
+        MAX(CASE WHEN f.year = 2023 THEN ROUND((f.profit / CAST(f.revenue AS FLOAT)) * 100, 1) END) as profitability_2023,
+        MAX(CASE WHEN f.year = 2024 THEN ROUND((f.profit / CAST(f.revenue AS FLOAT)) * 100, 1) END) as profitability_2024
+    FROM manufacturers m
+    JOIN financials f ON m.manufacturer_id = f.manufacturer_id
+    GROUP BY m.manufacturer_id
+)
+ORDER BY (profit_2024 - profit_2022) DESC;
+
+-- Сравнение высоко- и низколокализованных производителей по прибыльности
+SELECT 
+    localization_level,
+    manufacturer_count,
+    avg_profit,
+    avg_profitability_percent,
+    avg_profit_per_employee
+FROM (
+    SELECT 
+        l.overall_level as localization_level,
+        COUNT(*) as manufacturer_count,
+        ROUND(AVG(f.profit), 0) as avg_profit,
+        ROUND(AVG((f.profit / CAST(f.revenue AS FLOAT)) * 100), 1) as avg_profitability_percent,
+        ROUND(AVG(f.profit / pc.employees), 0) as avg_profit_per_employee
+    FROM localization l
+    JOIN financials f ON l.manufacturer_id = f.manufacturer_id AND f.year = 2024
+    JOIN production_capacities pc ON l.manufacturer_id = pc.manufacturer_id
+    GROUP BY l.overall_level
+)
+ORDER BY avg_profitability_percent DESC;
