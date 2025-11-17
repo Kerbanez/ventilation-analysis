@@ -17,7 +17,6 @@
 - Ventilation_analysis_10.pbix - главный BI отчет по заданной теме
 - Ventilation_analysis_10.pptx - вспомогательная (урезанная) версия отчета в .pptx формате (PowerPoint)
 
-##Источники и ресурсы:
 # Вспомогательные сервисы и ИИ:
   - https://chat.deepseek.com
   - https://alice.yandex.ru
